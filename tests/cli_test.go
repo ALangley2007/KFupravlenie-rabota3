@@ -29,7 +29,8 @@ func TestCLIPrintsRepresentation(t *testing.T) {
 		t.Fatalf("exit code %d: %s", code, &stderr)
 	}
 	var got assembler.Program
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	decoder := json.NewDecoder(&stdout)
+	if err := decoder.Decode(&got); err != nil {
 		t.Fatal(err)
 	}
 	want := assembler.Program{{"A": 128, "B": 46}}
@@ -39,27 +40,38 @@ func TestCLIPrintsRepresentation(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("unexpected stderr: %s", &stderr)
 	}
-	assertFileAbsent(t, outputPath)
+	wantOutput := "\nBytes:\n0x80, 0x2E, 0x00, 0x00\nSize: 4 bytes\n"
+	remaining, err := io.ReadAll(io.MultiReader(decoder.Buffered(), &stdout))
+	if err != nil || string(remaining) != wantOutput {
+		t.Fatalf("got trailing output %q (%v), want %q", remaining, err, wantOutput)
+	}
+	assertFileBytes(t, outputPath, []byte{0x80, 0x2E, 0x00, 0x00})
 }
 
-func TestCLIValidatesWithoutTestMode(t *testing.T) {
-	outputPath := filepath.Join(t.TempDir(), "missing", "program.bin")
-	args := []string{"-input", "fixtures/sub.json", "-output", outputPath}
+func TestCLIWritesWithoutTestMode(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "program.bin")
+	args := []string{"-input", "fixtures/all_commands.json", "-output", outputPath}
 	var stdout, stderr bytes.Buffer
 	if code := cli.Run(args, &stdout, &stderr); code != successExitCode {
 		t.Fatalf("exit code %d: %s", code, &stderr)
 	}
-	if stdout.Len() != 0 || stderr.Len() != 0 {
+	if stdout.String() != "Size: 16 bytes\n" || stderr.Len() != 0 {
 		t.Fatalf("unexpected output: stdout=%q stderr=%q", &stdout, &stderr)
 	}
-	assertFileAbsent(t, filepath.Dir(outputPath))
+	want := []byte{
+		0x80, 0x2E, 0x00, 0x00,
+		0xC7, 0x5F, 0x00, 0x00,
+		0x53, 0x71, 0x03, 0x00,
+		0xA5, 0x00, 0x00, 0x00,
+	}
+	assertFileBytes(t, outputPath, want)
 }
 
-func TestCLIPreservesExistingOutput(t *testing.T) {
+func TestCLIReplacesExistingOutput(t *testing.T) {
 	for _, mode := range []string{"-test=true", "-test=false"} {
 		t.Run(mode, func(t *testing.T) {
 			outputPath := filepath.Join(t.TempDir(), "program.bin")
-			original := []byte("existing output must survive stage one")
+			original := []byte("existing output is longer than one instruction")
 			if err := os.WriteFile(outputPath, original, 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -68,13 +80,7 @@ func TestCLIPreservesExistingOutput(t *testing.T) {
 			if code := cli.Run(args, io.Discard, &stderr); code != successExitCode {
 				t.Fatalf("exit code %d: %s", code, &stderr)
 			}
-			got, err := os.ReadFile(outputPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(got, original) {
-				t.Fatalf("output was modified: %q", got)
-			}
+			assertFileBytes(t, outputPath, []byte{0xA5, 0x00, 0x00, 0x00})
 		})
 	}
 }
@@ -137,13 +143,23 @@ func TestCLIHelp(t *testing.T) {
 }
 
 func TestCLIOutputError(t *testing.T) {
-	args := []string{"-input", "fixtures/sub.json", "-output", "unused.bin", "-test"}
-	var stderr bytes.Buffer
-	if code := cli.Run(args, failingWriter{}, &stderr); code != failureExitCode {
-		t.Fatalf("expected exit code 1, got %d", code)
+	cases := map[string]string{
+		"-test":       "print intermediate representation",
+		"-test=false": "print file size",
 	}
-	if !strings.Contains(stderr.String(), "print intermediate representation") {
-		t.Fatalf("missing output error: %s", &stderr)
+	for mode, message := range cases {
+		t.Run(mode, func(t *testing.T) {
+			outputPath := filepath.Join(t.TempDir(), "program.bin")
+			args := []string{"-input", "fixtures/sub.json", "-output", outputPath, mode}
+			var stderr bytes.Buffer
+			if code := cli.Run(args, failingWriter{}, &stderr); code != failureExitCode {
+				t.Fatalf("expected exit code 1, got %d", code)
+			}
+			if !strings.Contains(stderr.String(), message) {
+				t.Fatalf("missing output error: %s", &stderr)
+			}
+			assertFileBytes(t, outputPath, []byte{0xA5, 0x00, 0x00, 0x00})
+		})
 	}
 }
 
@@ -156,6 +172,17 @@ func (failingWriter) Write(data []byte) (int, error) {
 func assertFileAbsent(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stage one created an output artifact at %s: %v", path, err)
+		t.Fatalf("unexpected output artifact at %s: %v", path, err)
+	}
+}
+
+func assertFileBytes(t *testing.T, path string, want []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("file contains % X, want % X", got, want)
 	}
 }

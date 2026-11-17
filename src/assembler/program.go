@@ -1,4 +1,4 @@
-// Package assembler parses JSON assembly into an intermediate representation.
+// Package assembler parses JSON assembly and encodes it as machine code.
 package assembler
 
 // OpcodeLoadConstant pushes an unsigned constant onto the stack.

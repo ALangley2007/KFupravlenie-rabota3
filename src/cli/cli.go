@@ -1,8 +1,7 @@
-// Package cli provides the stage-one assembler command-line interface.
+// Package cli provides the assembler command-line interface.
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,7 +23,7 @@ type config struct {
 	testMode   bool
 }
 
-// Run parses arguments, validates the source, and optionally prints its intermediate representation.
+// Run assembles a source file, writes machine code, and reports its size and optional test output.
 func Run(args []string, stdout, stderr io.Writer) int {
 	cfg, err := parseFlags(args, stderr)
 	if errors.Is(err, flag.ErrHelp) {
@@ -37,10 +36,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return reportError(stderr, err, exitFailure)
 	}
-	if cfg.testMode {
-		if err := printProgram(stdout, program); err != nil {
-			return reportError(stderr, err, exitFailure)
-		}
+	code := assembler.Encode(program)
+	if err := writeBinary(cfg.outputPath, code); err != nil {
+		return reportError(stderr, err, exitFailure)
+	}
+	if err := printResult(stdout, program, code, cfg.testMode); err != nil {
+		return reportError(stderr, err, exitFailure)
 	}
 	return exitSuccess
 }
@@ -50,8 +51,8 @@ func parseFlags(args []string, stderr io.Writer) (config, error) {
 	flags := flag.NewFlagSet("assembler", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&cfg.inputPath, "input", "", "path to the JSON source (required)")
-	flags.StringVar(&cfg.outputPath, "output", "", "binary path reserved for stage 2 (required; no file is written)")
-	flags.BoolVar(&cfg.testMode, "test", false, "print the intermediate representation as JSON")
+	flags.StringVar(&cfg.outputPath, "output", "", "path to the output binary (required)")
+	flags.BoolVar(&cfg.testMode, "test", false, "print the intermediate representation and machine-code bytes")
 	if err := flags.Parse(args); err != nil {
 		return cfg, err
 	}
@@ -71,15 +72,6 @@ func readProgram(path string) (assembler.Program, error) {
 	}
 	defer file.Close()
 	return assembler.Parse(file)
-}
-
-func printProgram(writer io.Writer, program assembler.Program) error {
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(program); err != nil {
-		return fmt.Errorf("print intermediate representation: %w", err)
-	}
-	return nil
 }
 
 func reportError(stderr io.Writer, err error, code int) int {

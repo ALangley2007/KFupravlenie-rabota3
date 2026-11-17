@@ -1,0 +1,6 @@
+[
+  {"command": "load_const", "value": 46},
+  {"command": "read_mem", "address": 95},
+  {"command": "write_mem", "offset": 881},
+  {"command": "sub"}
+]
