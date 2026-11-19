@@ -1,4 +1,4 @@
-// Package cli provides the assembler command-line interface.
+// Package cli provides the assembler and interpreter command-line interfaces.
 package cli
 
 import (

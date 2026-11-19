@@ -1,0 +1,20 @@
+[
+  {"command": "load_const", "value": 46},
+  {"command": "load_const", "value": 0},
+  {"command": "write_mem", "offset": 0},
+  {"command": "load_const", "value": 0},
+  {"command": "load_const", "value": 1},
+  {"command": "write_mem", "offset": 0},
+  {"command": "load_const", "value": 16777215},
+  {"command": "load_const", "value": 2},
+  {"command": "write_mem", "offset": 0},
+  {"command": "read_mem", "address": 0},
+  {"command": "load_const", "value": 0},
+  {"command": "write_mem", "offset": 10},
+  {"command": "read_mem", "address": 1},
+  {"command": "load_const", "value": 1},
+  {"command": "write_mem", "offset": 10},
+  {"command": "read_mem", "address": 2},
+  {"command": "load_const", "value": 2},
+  {"command": "write_mem", "offset": 10}
+]

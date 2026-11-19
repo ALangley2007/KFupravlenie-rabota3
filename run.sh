@@ -10,7 +10,8 @@ usage() {
 
 Команды:
   run [аргументы CLI]  Собрать и запустить ассемблер
-  build                Собрать build/assembler
+  interpret [флаги]     Собрать и запустить интерпретатор
+  build                Собрать build/assembler и build/interpreter
   test [флаги go test]  Запустить тесты
   check [флаги тестов]  Запустить тесты и go vet
   fmt                  Отформатировать Go-код
@@ -19,6 +20,7 @@ usage() {
 
 Пример:
   ./run.sh run -input tests/fixtures/load_const.json -output program.bin -test
+  ./run.sh interpret -input program.bin -output memory.csv -start 0 -end 10
 
 Флаги CLI можно передавать и без команды run. Относительные пути к данным
 отсчитываются от текущего каталога. GO задаёт путь к исполняемому файлу Go.
@@ -47,6 +49,7 @@ project_go() (
 build() {
     mkdir -p -- "$project_root/build"
     project_go build -o "$project_root/build/assembler" ./src
+    project_go build -o "$project_root/build/interpreter" ./src/cmd/interpreter
 }
 
 action="${1:-help}"
@@ -68,7 +71,7 @@ case "$action" in
     build|fmt)
         without_arguments "$@"
         ;;
-    run|test|check)
+    run|interpret|test|check)
         ;;
     -*)
         set -- "$action" "$@"
@@ -85,6 +88,10 @@ case "$action" in
     run)
         build
         exec "$project_root/build/assembler" "$@"
+        ;;
+    interpret)
+        build
+        exec "$project_root/build/interpreter" "$@"
         ;;
     build)
         build
